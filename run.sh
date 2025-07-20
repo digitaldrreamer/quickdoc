@@ -1,13 +1,16 @@
 #!/bin/bash
 
-# Document Text Extraction Service Runner
-# This script starts the FastAPI service using uvicorn
+# --- Configuration ---
+SERVICE_PORT=8001
 
-echo "🚀 Starting Document Text Extraction Service..."
-echo "📄 Service will be available at: http://localhost:8000"
-echo "📊 API documentation at: http://localhost:8000/docs"
-echo "🔧 Use Ctrl+C to stop the service"
-echo ""
+# --- Script Logic ---
+echo "▶️ Checking for running process on port ${SERVICE_PORT}..."
 
-# Start the FastAPI service
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Use fuser to find and kill the process.
+# The '-k' flag sends the SIGKILL signal (forceful kill).
+# The '-s' flag runs it in silent mode.
+fuser -k -s ${SERVICE_PORT}/tcp
+
+echo "🚀 Starting Document & AI Processor..."
+# ... (rest of the script is the same)
+uvicorn app.main:app --host 0.0.0.0 --port ${SERVICE_PORT} --reload

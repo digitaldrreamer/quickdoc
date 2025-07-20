@@ -252,6 +252,11 @@ async def get_pdf_settings() -> Dict[str, Any]:
         logger.error(f"Failed to get PDF settings: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get PDF settings: {str(e)}")
 
+@router.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy"}
+
 @router.post("/convert-to-pdf-upload")
 async def convert_to_pdf_upload_endpoint(
     file: UploadFile = File(...),
