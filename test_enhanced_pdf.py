@@ -10,7 +10,7 @@ import time
 from typing import Dict, Any
 
 # Test configuration
-BASE_URL = "http://localhost:8001"
+BASE_URL = "http://localhost:8002"
 
 # Test markdown with various features
 ENHANCED_MARKDOWN = """

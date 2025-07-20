@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # --- Configuration ---
-SERVICE_PORT=8001
+SERVICE_PORT=8002
 
 # --- Script Logic ---
 echo "▶️ Checking for running process on port ${SERVICE_PORT}..."

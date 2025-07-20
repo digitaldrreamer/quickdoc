@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    PORT: int = 8001
+    PORT: int = 8002
     MAX_FILE_SIZE_MB: int = 15
     LOG_LEVEL: str = "INFO"
 

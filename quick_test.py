@@ -30,7 +30,7 @@ This is a **test document** with some basic formatting.
     try:
         print("Testing PDF conversion endpoint...")
         response = requests.post(
-            "http://localhost:8001/convert-to-pdf",
+            "http://localhost:8002/convert-to-pdf",
             json=test_data,
             timeout=30
         )
@@ -53,7 +53,7 @@ This is a **test document** with some basic formatting.
             print(f"  Error: {response.text}")
             
     except requests.exceptions.ConnectionError:
-        print("✗ Cannot connect to server. Please make sure the server is running on port 8001.")
+        print("✗ Cannot connect to server. Please make sure the server is running on port 8002.")
     except requests.exceptions.Timeout:
         print("✗ Request timed out")
     except Exception as e:
