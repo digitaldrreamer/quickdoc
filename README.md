@@ -9,20 +9,20 @@ An intelligent, configurable microservice for document text extraction, AI-power
 
 ---
 
-## ✨ Features
+## Features
 
-### 📄 Document Processing
+### Document Processing
 - **Multi-format Support**: PDF, DOCX, ODT, RTF, Markdown, and images (JPG, PNG, BMP, TIFF)
 - **Intelligent OCR**: Automatic text extraction from scanned PDFs and images using PaddleOCR
 - **Configurable Processing**: Enable/disable specific document types to save resources
 
-### 🤖 AI Services
+### AI Util Services
 - **Text Summarization**: Advanced summarization with configurable quality levels using transformer models
 - **Text Embeddings**: Generate semantic embeddings for texts and documents
 - **Token Counting**: Accurate token counting for Llama 3, Mistral, and Gemini models
 - **Async Processing**: Non-blocking AI operations with queue management
 
-### 🎛️ Configuration & Resource Management
+### Configuration & Resource Management
 - **Modular Features**: Enable only the services you need
 - **Resource Optimization**: Conditional model loading based on configuration
 - **Configurable Models**: Choose your preferred AI models via environment variables
@@ -61,7 +61,7 @@ An intelligent, configurable microservice for document text extraction, AI-power
    curl http://localhost:8002/health
    ```
 
-The service will be available at `http://localhost:8002` with interactive documentation at `http://localhost:8002/docs`.
+The service will be available at `http://localhost:8002` with interactive documentation at `http://localhost:8002/docs`. You can set the port in `.env`
 
 ### Option 2: Manual Installation
 
@@ -81,7 +81,7 @@ brew install pandoc poppler libmagic tesseract
 **Python Setup:**
 ```bash
 # Clone and setup
-git clone https://github.com/your-username/quickdoc.git
+git clone https://github.com/digitaldrreamer/quickdoc.git
 cd quickdoc
 
 # Create virtual environment
@@ -353,7 +353,7 @@ spec:
 
 ```bash
 # Clone and setup
-git clone https://github.com/your-username/quickdoc.git
+git clone https://github.com/digitaldrreamer/quickdoc.git
 cd quickdoc
 
 # Setup virtual environment
@@ -437,7 +437,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **PaddleOCR** for excellent OCR capabilities
 - **Hugging Face Transformers** for state-of-the-art NLP models
-- **FastAPI** for the amazing web framework
+- **FastAPI** for being so excellent
 - **The open source community** for inspiration and tools
 
 ---
@@ -447,5 +447,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Documentation**: Check `/docs` endpoint when service is running
 - **Issues**: Please report bugs via GitHub Issues
 - **Discussions**: Start discussions for feature requests and questions
-
-**Happy document processing! 🚀**
