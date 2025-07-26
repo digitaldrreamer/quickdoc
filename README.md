@@ -1,4 +1,4 @@
-# QuickDoc - Open Source Document & AI Processor 🚀
+# QuickDoc - Open Source Document & AI Processor
 
 An intelligent, configurable microservice for document text extraction, AI-powered summarization, text embedding, and token counting. Built with FastAPI and designed for scalability, QuickDoc lets you enable only the features you need to optimize resource usage.
 
@@ -428,13 +428,13 @@ We welcome contributions! Please see our contributing guidelines:
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **PaddleOCR** for excellent OCR capabilities
 - **Hugging Face Transformers** for state-of-the-art NLP models
@@ -443,7 +443,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📞 Support
+## Support
 
 - **Documentation**: Check `/docs` endpoint when service is running
 - **Issues**: Please report bugs via GitHub Issues
