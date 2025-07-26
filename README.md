@@ -36,7 +36,7 @@ An intelligent, configurable microservice for document text extraction, AI-power
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/quickdoc.git
+   git clone https://github.com/digitaldrreamer/quickdoc.git
    cd quickdoc
    ```
 
