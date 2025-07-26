@@ -30,7 +30,7 @@ An intelligent, configurable microservice for document text extraction, AI-power
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Option 1: Docker (Recommended)
 
@@ -112,7 +112,7 @@ gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8002
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 QuickDoc is highly configurable through environment variables. Copy `env.example` to `.env` and customize:
 
@@ -165,7 +165,7 @@ ENABLE_DOCUMENT_PROCESSING=false
 
 ---
 
-## 📖 API Documentation
+## API Documentation
 
 ### Document Conversion Endpoints
 
@@ -238,7 +238,7 @@ curl -X POST -H "Content-Type: application/json" \
 
 ---
 
-## 🐳 Deployment
+## Deployment
 
 ### Docker Deployment
 
@@ -347,7 +347,7 @@ spec:
 
 ---
 
-## 🛠️ Development
+## Development
 
 ### Setting up Development Environment
 
@@ -389,7 +389,7 @@ The project follows Google Python Style Guide and includes:
 
 ---
 
-## 🔧 Technology Stack
+## Technology Stack
 
 - **Framework**: FastAPI 0.104+
 - **AI/ML**: 
@@ -407,7 +407,7 @@ The project follows Google Python Style Guide and includes:
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please see our contributing guidelines:
 
@@ -424,6 +424,7 @@ We welcome contributions! Please see our contributing guidelines:
 - Write tests for new features
 - Update documentation for API changes
 - Use Better Comments style for inline comments
+- Use good branch names so one can understand at first glance
 
 ---
 
