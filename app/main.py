@@ -5,52 +5,94 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 import asyncio
+from typing import Optional
 
 from .routes import router as doc_conversion_router
 from .api.ai_routes import router as ai_router
-from .services.embedding_service import EmbeddingService
-from .services.summarization_service import OptimizedSummarizer
-from .services.token_service import TokenCounter
 from .core.config import settings
 
+# * Conditional imports based on configuration
+if settings.ENABLE_EMBEDDING_MODEL:
+    from .services.embedding_service import EmbeddingService
+
+if settings.ENABLE_SUMMARIZATION:
+    from .services.summarization_service import OptimizedSummarizer
+
+if settings.ENABLE_TOKEN_COUNTING:
+    from .services.token_service import TokenCounter
+
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', stream=sys.stderr)
+logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL.upper()), 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+                   stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
 
 # Lifespan manager to load models on startup
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Application startup: Loading AI models...")
+    logger.info("Application startup: Loading enabled services...")
     loop = asyncio.get_event_loop()
+    
+    # * Initialize services based on configuration
+    futures = []
+    
+    if settings.ENABLE_EMBEDDING_MODEL:
+        logger.info("Loading embedding service...")
+        futures.append(("embedder", loop.run_in_executor(None, lambda: EmbeddingService(settings.EMBEDDING_MODEL))))
+    else:
+        logger.info("Embedding service disabled - skipping model loading")
+        
+    if settings.ENABLE_SUMMARIZATION:
+        logger.info("Loading summarization service...")
+        futures.append(("summarizer", loop.run_in_executor(None, lambda: OptimizedSummarizer(settings.SUMMARIZATION_MODEL))))
+    else:
+        logger.info("Summarization service disabled - skipping model loading")
+        
+    if settings.ENABLE_TOKEN_COUNTING:
+        logger.info("Loading token counting service...")
+        futures.append(("tokenizer", loop.run_in_executor(None, TokenCounter)))
+    else:
+        logger.info("Token counting service disabled - skipping model loading")
 
-    embedding_service_future = loop.run_in_executor(None, EmbeddingService)
-    summarizer_future = loop.run_in_executor(None, OptimizedSummarizer)
-    token_counter_future = loop.run_in_executor(None, TokenCounter)
+    # * Wait for enabled services to load
+    if futures:
+        results = await asyncio.gather(*[future for _, future in futures])
+        for (service_name, _), result in zip(futures, results):
+            setattr(app.state, service_name, result)
+    
+    # * Initialize optional services with None if disabled
+    if not settings.ENABLE_EMBEDDING_MODEL:
+        app.state.embedder = None
+    if not settings.ENABLE_SUMMARIZATION:
+        app.state.summarizer = None
+    if not settings.ENABLE_TOKEN_COUNTING:
+        app.state.tokenizer = None
 
-    app.state.embedder, app.state.summarizer, app.state.tokenizer = await asyncio.gather(
-        embedding_service_future,
-        summarizer_future,
-        token_counter_future
-    )
+    logger.info("All enabled services loaded.")
 
-    logger.info("All AI models loaded.")
-
-    app.state.summarization_queue = asyncio.Queue()
-    app.state.summarization_worker = asyncio.create_task(
-        summarization_worker(app.state.summarization_queue, app.state.summarizer)
-    )
-    logger.info("Summarization worker started.")
+    # * Start summarization worker only if summarization is enabled
+    if settings.ENABLE_SUMMARIZATION and hasattr(app.state, 'summarizer'):
+        app.state.summarization_queue = asyncio.Queue(maxsize=settings.MAX_SUMMARIZATION_QUEUE_SIZE)
+        app.state.summarization_worker = asyncio.create_task(
+            summarization_worker(app.state.summarization_queue, app.state.summarizer)
+        )
+        logger.info("Summarization worker started.")
+    else:
+        app.state.summarization_queue = None
+        app.state.summarization_worker = None
 
     yield
 
-    app.state.summarization_worker.cancel()
-    logger.info("Summarization worker stopped.")
+    # Cleanup
+    if hasattr(app.state, 'summarization_worker') and app.state.summarization_worker:
+        app.state.summarization_worker.cancel()
+        logger.info("Summarization worker stopped.")
     logger.info("Application shutdown.")
 
 
 # Background worker for summarization queue
-async def summarization_worker(queue: asyncio.Queue, summarizer: OptimizedSummarizer):
+async def summarization_worker(queue: asyncio.Queue, summarizer):
     while True:
         try:
             request_data, future = await queue.get()
@@ -68,9 +110,9 @@ async def summarization_worker(queue: asyncio.Queue, summarizer: OptimizedSummar
 
 # Create FastAPI app
 app = FastAPI(
-    title="Kuro-Bot Document & AI Processor",
-    description="A microservice for text extraction, PDF conversion, embedding, summarization, and tokenization.",
-    version="2.0.0",
+    title="QuickDoc - Open Source Document & AI Processor",
+    description="A microservice for text extraction, PDF conversion, embedding, summarization, and tokenization with configurable features.",
+    version="2.1.0",
     lifespan=lifespan
 )
 
@@ -86,25 +128,33 @@ class DynamicCORS(CORSMiddleware):
             origin_header = dict(scope["headers"]).get(b"origin")
             if origin_header:
                 origin = origin_header.decode("latin1")
-                if origin.endswith(".kuroconnect.com") and origin not in self._known_origins:
-                    self.allow_origins.append(origin)
-                    self._known_origins.add(origin)
-                    logger.info(f"Dynamically allowed CORS origin: {origin}")
+                # * Allow localhost and common development patterns
+                if any(allowed in origin for allowed in ["localhost", "127.0.0.1", "0.0.0.0"]) or origin.endswith(".kuroconnect.com"):
+                    if origin not in self._known_origins:
+                        self.allow_origins.append(origin)
+                        self._known_origins.add(origin)
+                        logger.info(f"Dynamically allowed CORS origin: {origin}")
         return await super().__call__(scope, receive, send)
 
 
 # Register CORS middleware
 app.add_middleware(
     DynamicCORS,
-    allow_origins=[],  # initially empty, filled dynamically
+    allow_origins=["http://localhost:3000", "http://localhost:8080"],  # Common development ports
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# Register routers
-app.include_router(doc_conversion_router, tags=["Document Conversion"])
+# Register routers conditionally
+if settings.ENABLE_DOCUMENT_PROCESSING:
+    app.include_router(doc_conversion_router, tags=["Document Conversion"])
+    logger.info("Document conversion routes enabled")
+else:
+    logger.info("Document processing disabled - skipping document conversion routes")
+
+# * Always include AI routes, but they'll check for service availability internally
 app.include_router(ai_router, prefix="/ai", tags=["AI Services"])
 
 
@@ -121,27 +171,54 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Health check
 @app.get("/health", tags=["Utilities"])
 async def health_check():
-    return {"status": "healthy", "service": "kuro-bot-processor"}
-
-
-# Root
-@app.get("/", tags=["Utilities"])
-async def root():
-    return {
-        "message": "Kuro-Bot Document & AI Processor",
-        "documentation": "/docs",
-        "document_conversion_endpoints": {
-            "extract_text": "POST /extract",
-            "convert_to_pdf": "POST /convert-to-pdf",
-        },
-        "ai_service_endpoints": {
-            "embed_text": "POST /ai/embed/text",
-            "embed_document": "POST /ai/embed/document",
-            "summarize": "POST /ai/summarize",
-            "count_tokens": "POST /ai/tokens/count",
-            "batch_count_tokens": "POST /ai/tokens/batch",
+    """Health check endpoint with service status information."""
+    status = {
+        "status": "healthy",
+        "service": "quickdoc-processor",
+        "version": "2.1.0",
+        "features": {
+            "document_processing": settings.ENABLE_DOCUMENT_PROCESSING,
+            "summarization": settings.ENABLE_SUMMARIZATION,
+            "embedding": settings.ENABLE_EMBEDDING_MODEL,
+            "token_counting": settings.ENABLE_TOKEN_COUNTING,
         }
     }
+    return status
+
+
+# Root endpoint with dynamic documentation
+@app.get("/", tags=["Utilities"])
+async def root():
+    endpoints = {
+        "message": "QuickDoc - Open Source Document & AI Processor",
+        "documentation": "/docs",
+        "health": "/health",
+    }
+    
+    if settings.ENABLE_DOCUMENT_PROCESSING:
+        endpoints["document_conversion_endpoints"] = {
+            "extract_text": "POST /extract",
+            "convert_to_pdf": "POST /convert-to-pdf",
+        }
+    
+    ai_endpoints = {}
+    if settings.ENABLE_EMBEDDING_MODEL:
+        ai_endpoints.update({
+            "embed_text": "POST /ai/embed/text",
+            "embed_document": "POST /ai/embed/document",
+        })
+    if settings.ENABLE_SUMMARIZATION:
+        ai_endpoints["summarize"] = "POST /ai/summarize"
+    if settings.ENABLE_TOKEN_COUNTING:
+        ai_endpoints.update({
+            "count_tokens": "POST /ai/tokens/count",
+            "batch_count_tokens": "POST /ai/tokens/batch",
+        })
+    
+    if ai_endpoints:
+        endpoints["ai_service_endpoints"] = ai_endpoints
+    
+    return endpoints
 
 
 # Uvicorn launch (optional if using gunicorn/uvicorn CLI)

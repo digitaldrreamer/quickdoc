@@ -190,6 +190,8 @@ temp_files/
 *.md
 *.markdown
 
+!README.md
+
 # PaddleOCR models and cache
 .paddleocr/
 inference/

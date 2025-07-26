@@ -3,21 +3,61 @@ import logging
 import tempfile
 import os
 import asyncio
-from typing import List
+from typing import List, Optional
 
 from app.core.models import *
 from app.core.config import settings
-from app.processor import extract_text_from_doc
+
+# * Only import document processing if enabled
+if settings.ENABLE_DOCUMENT_PROCESSING:
+    from app.processor import extract_text_from_doc
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# --- Dependency to get ML models from app state ---
+# --- Dependency to get ML models from app state with service checks ---
 def get_embedder(request: Request):
-    return request.app.state.embedder
+    if not settings.ENABLE_EMBEDDING_MODEL:
+        raise HTTPException(
+            status_code=503, 
+            detail="Embedding service is disabled. Set ENABLE_EMBEDDING_MODEL=true to enable this feature."
+        )
+    embedder = getattr(request.app.state, 'embedder', None)
+    if embedder is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="Embedding service is not available. Please check service configuration."
+        )
+    return embedder
 
 def get_tokenizer(request: Request):
-    return request.app.state.tokenizer
+    if not settings.ENABLE_TOKEN_COUNTING:
+        raise HTTPException(
+            status_code=503, 
+            detail="Token counting service is disabled. Set ENABLE_TOKEN_COUNTING=true to enable this feature."
+        )
+    tokenizer = getattr(request.app.state, 'tokenizer', None)
+    if tokenizer is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="Token counting service is not available. Please check service configuration."
+        )
+    return tokenizer
+
+def check_summarization_service(request: Request):
+    if not settings.ENABLE_SUMMARIZATION:
+        raise HTTPException(
+            status_code=503, 
+            detail="Summarization service is disabled. Set ENABLE_SUMMARIZATION=true to enable this feature."
+        )
+    summarizer = getattr(request.app.state, 'summarizer', None)
+    queue = getattr(request.app.state, 'summarization_queue', None)
+    if summarizer is None or queue is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="Summarization service is not available. Please check service configuration."
+        )
+    return queue
 
 # --- Embedding Endpoints ---
 
@@ -27,10 +67,14 @@ async def embed_text(
     embedder = Depends(get_embedder)
 ):
     """Embeds a single string of text."""
-    embedding = await asyncio.to_thread(
-        embedder.embed_text, request.text, request.normalize
-    )
-    return EmbedTextResponse(embedding=embedding, dimensions=embedder.dimensions)
+    try:
+        embedding = await asyncio.to_thread(
+            embedder.embed_text, request.text, request.normalize
+        )
+        return EmbedTextResponse(embedding=embedding, dimensions=embedder.dimensions)
+    except Exception as e:
+        logger.error(f"Error in text embedding: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate text embedding")
 
 @router.post("/embed/document", response_model=EmbedDocumentResponse)
 async def embed_document(
@@ -38,6 +82,12 @@ async def embed_document(
     embedder = Depends(get_embedder)
 ):
     """Extracts text from a document and returns embeddings for text chunks."""
+    if not settings.ENABLE_DOCUMENT_PROCESSING:
+        raise HTTPException(
+            status_code=503,
+            detail="Document processing is disabled. Set ENABLE_DOCUMENT_PROCESSING=true to enable this feature."
+        )
+    
     if file.size > settings.MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=413,
@@ -67,6 +117,11 @@ async def embed_document(
             dimensions=embedder.dimensions,
             text_char_count=len(extracted_text)
         )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in document embedding: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process document for embedding")
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
@@ -76,23 +131,34 @@ async def embed_document(
 @router.post("/summarize", response_model=SummarizeResponse)
 async def summarize_text(request: Request, summarize_request: SummarizeRequest):
     """Summarizes a long piece of text using a queued background worker."""
-    queue = request.app.state.summarization_queue
+    queue = check_summarization_service(request)
+    
+    if queue.qsize() >= settings.MAX_SUMMARIZATION_QUEUE_SIZE:
+        raise HTTPException(
+            status_code=503, 
+            detail="Summarization queue is full. Please try again later."
+        )
+    
     loop = asyncio.get_event_loop()
     future = loop.create_future()
     
-    await queue.put((summarize_request.model_dump(), future))
-
     try:
-        summary = await asyncio.wait_for(future, timeout=300) # 5 minute timeout
+        await queue.put((summarize_request.model_dump(), future))
+        summary_data = await asyncio.wait_for(future, timeout=settings.SUMMARIZATION_TIMEOUT)
+        
         return SummarizeResponse(
-            summary=summary,
-            original_char_count=len(summarize_request.text),
-            summary_char_count=len(summary)
+            summary=summary_data.get("summary", ""),
+            original_char_count=summary_data.get("original_char_count", len(summarize_request.text)),
+            summary_char_count=summary_data.get("summary_char_count", 0)
         )
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Summarization request timed out.")
+        raise HTTPException(
+            status_code=504, 
+            detail=f"Summarization request timed out after {settings.SUMMARIZATION_TIMEOUT} seconds."
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in summarization: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate summary")
 
 # --- Tokenizer Endpoints ---
 
@@ -114,6 +180,9 @@ async def count_tokens(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in token counting: {e}")
+        raise HTTPException(status_code=500, detail="Failed to count tokens")
 
 @router.post("/tokens/batch/{model}", response_model=TokenBatchResponse)
 async def batch_count_tokens(
@@ -133,3 +202,6 @@ async def batch_count_tokens(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in batch token counting: {e}")
+        raise HTTPException(status_code=500, detail="Failed to count tokens")

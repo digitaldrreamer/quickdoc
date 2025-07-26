@@ -27,6 +27,7 @@ from PIL import Image
 import cv2
 import numpy as np
 from .metrics import ResourceTracker
+from .core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,9 @@ _ocr_instance = None
 
 def get_ocr_instance():
     """Get or create PaddleOCR instance with detailed logging."""
+    if not settings.ENABLE_IMAGE_OCR:
+        raise Exception("OCR functionality is disabled. Set ENABLE_IMAGE_OCR=true to enable OCR features.")
+    
     global _ocr_instance
     if _ocr_instance is None:
         try:
@@ -74,12 +78,20 @@ async def extract_text_from_doc(file_path: str, filename: str, tracker: Optional
     
     try:
         if file_ext == '.pdf':
+            if not settings.ENABLE_PDF_PROCESSING:
+                raise ValueError("PDF processing is disabled. Set ENABLE_PDF_PROCESSING=true to enable PDF support.")
             return await extract_text_from_pdf(file_path, tracker)
         elif file_ext in ['.docx', '.odt', '.rtf']:
+            if not settings.ENABLE_DOCX_PROCESSING:
+                raise ValueError("Document processing (DOCX/ODT/RTF) is disabled. Set ENABLE_DOCX_PROCESSING=true to enable support for these formats.")
             return await extract_text_with_pandoc(file_path, file_ext, tracker)
         elif file_ext in ['.md', '.markdown']:
+            if not settings.ENABLE_MARKDOWN_PROCESSING:
+                raise ValueError("Markdown processing is disabled. Set ENABLE_MARKDOWN_PROCESSING=true to enable Markdown support.")
             return await extract_text_from_markdown(file_path, tracker)
         elif file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']:
+            if not settings.ENABLE_IMAGE_OCR:
+                raise ValueError("Image OCR processing is disabled. Set ENABLE_IMAGE_OCR=true to enable image text extraction.")
             return await extract_text_from_image(file_path, tracker)
         else:
             raise ValueError(f"Unsupported file type: {file_ext}")
@@ -103,6 +115,13 @@ async def extract_text_from_pdf(file_path: str, tracker: Optional[ResourceTracke
                 tracker.log_method("pdfminer")
             return text.strip()
         
+        # ! Check if OCR is enabled before attempting OCR
+        if not settings.ENABLE_IMAGE_OCR:
+            logger.warning("PDF appears to be scanned but OCR is disabled. Returning minimal text extracted.")
+            if tracker:
+                tracker.log_method("pdfminer_no_ocr")
+            return text.strip() if text else ""
+        
         logger.info("PDF appears to be scanned or has minimal text, trying OCR")
         
         # If minimal text, try OCR approach
@@ -110,6 +129,12 @@ async def extract_text_from_pdf(file_path: str, tracker: Optional[ResourceTracke
         
     except Exception as e:
         logger.warning(f"pdfminer failed: {e}. Trying OCR approach")
+        
+        # ! Check if OCR is enabled before attempting OCR fallback
+        if not settings.ENABLE_IMAGE_OCR:
+            logger.error("PDF processing failed and OCR is disabled. Cannot extract text.")
+            raise Exception("PDF processing failed and OCR is disabled. Enable OCR with ENABLE_IMAGE_OCR=true to handle scanned PDFs.")
+        
         return await extract_text_from_pdf_ocr(file_path, tracker)
 
 async def extract_text_from_pdf_ocr(file_path: str, tracker: Optional[ResourceTracker] = None) -> str:
