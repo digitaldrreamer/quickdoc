@@ -2,7 +2,7 @@ import os
 import subprocess
 import tempfile
 import logging
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 import asyncio
 import io
@@ -321,4 +321,167 @@ async def extract_text_from_image_data(img: Image.Image) -> str:
         
     except Exception as e:
         logger.error(f"PaddleOCR failed: {e}")
+        raise
+
+async def extract_text_by_pages_from_pdf(file_path: str, tracker: Optional[ResourceTracker] = None) -> List[str]:
+    """
+    Extract text from PDF page by page, returning a list of page texts.
+    
+    Args:
+        file_path: Path to the PDF file
+        tracker: Optional resource tracker instance
+    
+    Returns:
+        List of strings, where each string contains the text from one page
+    """
+    
+    try:
+        # Add timeout for PDF processing (60 seconds for large textbooks)
+        pages_text = await asyncio.wait_for(
+            extract_text_by_pages_pdfminer(file_path, tracker), 
+            timeout=60.0
+        )
+        
+        if pages_text and any(len(page.strip()) > 10 for page in pages_text):  # Reasonable amount of text found
+            logger.info(f"Successfully extracted text from {len(pages_text)} pages using pdfminer")
+            if tracker:
+                tracker.log_method("pdfminer_pages")
+            return pages_text
+        
+        # Check if OCR is enabled before attempting OCR
+        if not settings.ENABLE_IMAGE_OCR:
+            logger.warning("PDF appears to be scanned but OCR is disabled. Returning minimal text extracted.")
+            if tracker:
+                tracker.log_method("pdfminer_no_ocr_pages")
+            return pages_text if pages_text else [""]
+        
+        logger.info("PDF appears to be scanned or has minimal text, trying OCR")
+        
+        # If minimal text, try OCR approach
+        return await asyncio.wait_for(
+            extract_text_by_pages_pdf_ocr(file_path, tracker),
+            timeout=180.0  # OCR takes much longer for textbooks
+        )
+        
+    except Exception as e:
+        logger.warning(f"pdfminer page extraction failed: {e}. Trying OCR approach")
+        
+        # Check if OCR is enabled before attempting OCR fallback
+        if not settings.ENABLE_IMAGE_OCR:
+            logger.error("PDF processing failed and OCR is disabled. Cannot extract text.")
+            raise Exception("PDF processing failed and OCR is disabled. Enable OCR with ENABLE_IMAGE_OCR=true to handle scanned PDFs.")
+        
+        return await asyncio.wait_for(
+            extract_text_by_pages_pdf_ocr(file_path, tracker),
+            timeout=180.0
+        )
+
+async def extract_text_by_pages_pdfminer(file_path: str, tracker: Optional[ResourceTracker] = None) -> List[str]:
+    """
+    Extract text from PDF page by page using pdfminer.six.
+    """
+    pages_text = []
+    
+    try:
+        with open(file_path, 'rb') as file:
+            resource_manager = PDFResourceManager()
+            laparams = LAParams()
+            
+            for page_num, page in enumerate(PDFPage.get_pages(file, check_extractable=True)):
+                # Create a text converter for this page
+                output_string = StringIO()
+                converter = TextConverter(resource_manager, output_string, laparams=laparams)
+                page_interpreter = PDFPageInterpreter(resource_manager, converter)
+                
+                # Process the page
+                page_interpreter.process_page(page)
+                text = output_string.getvalue()
+                
+                # Clean up
+                converter.close()
+                output_string.close()
+                
+                pages_text.append(text.strip() if text.strip() else "")
+                
+        logger.info(f"pdfminer extracted text from {len(pages_text)} pages")
+        return pages_text
+        
+    except Exception as e:
+        logger.error(f"pdfminer page extraction failed: {e}")
+        raise
+
+async def extract_text_by_pages_pdf_ocr(file_path: str, tracker: Optional[ResourceTracker] = None) -> List[str]:
+    """
+    Extract text from PDF page by page using OCR (for scanned PDFs).
+    """
+    if tracker:
+        tracker.log_method("pdf_ocr_pymupdf_pages")
+
+    if PYMUPDF_AVAILABLE:
+        try:
+            # Convert PDF to images using PyMuPDF
+            doc = fitz.open(file_path)
+            pages_text = []
+            
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                pix = page.get_pixmap()
+                img_data = pix.tobytes("png")
+                
+                # Convert to PIL Image
+                img = Image.open(io.BytesIO(img_data))
+                
+                # Run OCR on the image
+                page_text = await extract_text_from_image_data(img)
+                pages_text.append(page_text if page_text else "")
+            
+            doc.close()
+            
+            logger.info(f"OCR extracted text from {len(pages_text)} pages")
+            return pages_text
+            
+        except Exception as e:
+            logger.error(f"PyMuPDF OCR page extraction failed: {e}")
+            # Fallback to pdftoppm
+            return await extract_text_by_pages_pdf_pdftoppm(file_path, tracker)
+    else:
+        # Fallback to pdftoppm if PyMuPDF is not available
+        return await extract_text_by_pages_pdf_pdftoppm(file_path, tracker)
+
+async def extract_text_by_pages_pdf_pdftoppm(file_path: str, tracker: Optional[ResourceTracker] = None) -> List[str]:
+    """
+    Extract text from PDF page by page using pdftoppm + OCR as fallback.
+    """
+    if tracker:
+        tracker.log_method("pdf_ocr_pdftoppm_pages")
+    
+    try:
+        # Convert PDF to images using pdftoppm
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cmd = [
+                'pdftoppm', 
+                '-png', 
+                file_path, 
+                os.path.join(temp_dir, 'page')
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode != 0:
+                raise Exception(f"pdftoppm failed: {result.stderr}")
+            
+            # Process each generated image
+            pages_text = []
+            image_files = sorted([f for f in os.listdir(temp_dir) if f.endswith('.png')])
+            
+            for image_file in image_files:
+                image_path = os.path.join(temp_dir, image_file)
+                page_text = await extract_text_from_image(image_path)
+                pages_text.append(page_text if page_text else "")
+            
+            logger.info(f"pdftoppm + OCR extracted text from {len(pages_text)} pages")
+            return pages_text
+            
+    except Exception as e:
+        logger.error(f"pdftoppm + OCR page extraction failed: {e}")
         raise
