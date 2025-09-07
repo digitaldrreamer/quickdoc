@@ -29,6 +29,18 @@ import numpy as np
 from .metrics import ResourceTracker
 from .core.config import settings
 
+# Try to import EPUB libraries with proper error handling
+try:
+    import ebooklib
+    from ebooklib import epub
+    from bs4 import BeautifulSoup
+    EPUB_AVAILABLE = True
+except ImportError:
+    EPUB_AVAILABLE = False
+    epub = None  # type: ignore
+    BeautifulSoup = None  # type: ignore
+    logging.warning("EPUB libraries not available, will skip EPUB processing")
+
 logger = logging.getLogger(__name__)
 
 # Global PaddleOCR instance (lazy loaded)
@@ -93,6 +105,10 @@ async def extract_text_from_doc(file_path: str, filename: str, tracker: Optional
             if not settings.ENABLE_IMAGE_OCR:
                 raise ValueError("Image OCR processing is disabled. Set ENABLE_IMAGE_OCR=true to enable image text extraction.")
             return await extract_text_from_image(file_path, tracker)
+        elif file_ext == '.epub':
+            if not settings.ENABLE_EPUB_PROCESSING:
+                raise ValueError("EPUB processing is disabled. Set ENABLE_EPUB_PROCESSING=true to enable EPUB support.")
+            return await extract_text_from_epub(file_path, tracker)
         else:
             raise ValueError(f"Unsupported file type: {file_ext}")
             
@@ -484,4 +500,106 @@ async def extract_text_by_pages_pdf_pdftoppm(file_path: str, tracker: Optional[R
             
     except Exception as e:
         logger.error(f"pdftoppm + OCR page extraction failed: {e}")
+        raise
+
+async def extract_text_from_epub(file_path: str, tracker: Optional[ResourceTracker] = None) -> str:
+    """
+    Extract text from EPUB file.
+    
+    Args:
+        file_path: Path to the EPUB file
+        tracker: Optional resource tracker instance
+    
+    Returns:
+        Extracted text as string
+    """
+    if not EPUB_AVAILABLE:
+        raise Exception("EPUB processing is not available. Install ebooklib and beautifulsoup4 to enable EPUB support.")
+    
+    if tracker:
+        tracker.log_method("epub_extraction")
+    
+    try:
+        # Read the EPUB file
+        book = epub.read_epub(file_path)
+        text_content = []
+        
+        # Get all document items (chapters, sections, etc.)
+        for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+            # Parse HTML content
+            soup = BeautifulSoup(item.get_content(), 'html.parser')
+            
+            # Extract text from various HTML elements
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+            
+            # Get text content
+            text = soup.get_text()
+            
+            # Clean up whitespace
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text = ' '.join(chunk for chunk in chunks if chunk)
+            
+            if text:
+                text_content.append(text)
+        
+        # Join all text content
+        full_text = '\n\n'.join(text_content)
+        
+        logger.info(f"EPUB extracted {len(full_text)} characters from {len(text_content)} sections")
+        return full_text.strip()
+        
+    except Exception as e:
+        logger.error(f"EPUB extraction failed: {e}")
+        raise
+
+async def extract_text_by_chapters_from_epub(file_path: str, tracker: Optional[ResourceTracker] = None) -> List[str]:
+    """
+    Extract text from EPUB file chapter by chapter.
+    
+    Args:
+        file_path: Path to the EPUB file
+        tracker: Optional resource tracker instance
+    
+    Returns:
+        List of strings, where each string contains the text from one chapter/section
+    """
+    if not EPUB_AVAILABLE:
+        raise Exception("EPUB processing is not available. Install ebooklib and beautifulsoup4 to enable EPUB support.")
+    
+    if tracker:
+        tracker.log_method("epub_chapter_extraction")
+    
+    try:
+        # Read the EPUB file
+        book = epub.read_epub(file_path)
+        chapters_text = []
+        
+        # Get all document items (chapters, sections, etc.)
+        for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+            # Parse HTML content
+            soup = BeautifulSoup(item.get_content(), 'html.parser')
+            
+            # Extract text from various HTML elements
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+            
+            # Get text content
+            text = soup.get_text()
+            
+            # Clean up whitespace
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text = ' '.join(chunk for chunk in chunks if chunk)
+            
+            chapters_text.append(text if text else "")
+        
+        logger.info(f"EPUB extracted text from {len(chapters_text)} chapters")
+        return chapters_text
+        
+    except Exception as e:
+        logger.error(f"EPUB chapter extraction failed: {e}")
         raise
