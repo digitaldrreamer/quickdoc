@@ -3,12 +3,12 @@ from fastapi.responses import JSONResponse, Response
 import logging
 import tempfile
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
 import json
 import time
 
-from .processor import extract_text_from_doc
+from .processor import extract_text_from_doc, extract_text_by_pages_from_pdf
 from .utils import get_file_type, is_supported_file_type
 from .metrics import ResourceTracker
 from .pdf_converter import PDFConverter, Priority, ContentType
@@ -69,6 +69,14 @@ class PDFSettingsRequest(BaseModel):
     enable_toc: Optional[bool] = Field(default=False, description="Enable table of contents by default")
     image_optimization: Optional[bool] = Field(default=True, description="Enable image optimization")
     pdf_version: Optional[str] = Field(default="1.7", description="PDF version")
+
+class PDFPagesResponse(BaseModel):
+    """Response model for page-by-page PDF text extraction"""
+    pages: List[str] = Field(..., description="List of text content for each page")
+    page_count: int = Field(..., description="Total number of pages")
+    filename: str = Field(..., description="Original filename")
+    file_type: str = Field(..., description="File extension")
+    metrics: Dict[str, Any] = Field(..., description="Processing metrics")
 
 @router.post("/extract")
 async def extract_text_endpoint(file: UploadFile = File(...)) -> Dict[str, Any]:
@@ -139,6 +147,111 @@ async def extract_text_endpoint(file: UploadFile = File(...)) -> Dict[str, Any]:
         raise HTTPException(
             status_code=500, 
             detail=f"Error processing file: {str(e)}"
+        )
+    finally:
+        # Clean up temporary file
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except Exception as e:
+                logger.warning(f"Could not delete temporary file {temp_file_path}: {e}")
+
+@router.post("/extract-pages", response_model=PDFPagesResponse)
+async def extract_text_by_pages_endpoint(file: UploadFile = File(...)) -> PDFPagesResponse:
+    """
+    Extract text from uploaded PDF page by page.
+    
+    Accepts: PDF files only
+    Returns: JSON with array of page texts and processing metrics
+    
+    Processing Limits:
+    - File size: Maximum 50MB
+    - Text-based PDFs: 60 second timeout
+    - Scanned PDFs (OCR): 180 second timeout
+    
+    Recommendations for Large Documents:
+    - For textbooks with 500+ pages, consider processing in batches
+    - Very large scanned documents (1000+ pages) may require background processing
+    - Complex academic PDFs with equations/diagrams may take longer to process
+    
+    Response Format:
+    {
+        "pages": ["page 1 text", "page 2 text", ...],
+        "page_count": 2,
+        "filename": "document.pdf",
+        "file_type": ".pdf",
+        "metrics": {
+            "processing_time_seconds": 1.23,
+            "method_used": "pdfminer_pages",
+            "memory_usage_mb": 45.6
+        }
+    }
+    """
+    
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
+    # Check if file is PDF
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext != '.pdf':
+        raise HTTPException(
+            status_code=400, 
+            detail="Only PDF files are supported for page-by-page extraction"
+        )
+    
+    # Check file size limit (use existing limit from settings)
+    content = await file.read()
+    if len(content) > 50 * 1024 * 1024:  # 50MB limit
+        raise HTTPException(
+            status_code=413,
+            detail="File too large. Maximum size for page-by-page extraction is 50MB."
+        )
+    
+    # Create temporary file
+    temp_file_path = ""
+    try:
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
+        file_size = os.path.getsize(temp_file_path)
+        logger.info(f"Processing PDF for page-by-page extraction: {file.filename} (size: {file_size} bytes)")
+        
+        # Track metrics during text extraction
+        with ResourceTracker() as tracker:
+            pages_text = await extract_text_by_pages_from_pdf(temp_file_path, tracker)
+        
+        metrics = tracker.get_metrics(file_size_bytes=file_size)
+        logger.info(f"Page-by-page extraction metrics for {file.filename}: {metrics}")
+
+        if not pages_text or not any(page.strip() for page in pages_text):
+            logger.warning(f"No text extracted from any page of file: {file.filename}")
+            return PDFPagesResponse(
+                pages=[""],
+                page_count=1,
+                filename=file.filename,
+                file_type=file_ext,
+                metrics=metrics
+            )
+        
+        logger.info(f"Successfully extracted text from {len(pages_text)} pages of {file.filename}")
+        
+        return PDFPagesResponse(
+            pages=pages_text,
+            page_count=len(pages_text),
+            filename=file.filename,
+            file_type=file_ext,
+            metrics=metrics
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing PDF file {file.filename}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error processing PDF file: {str(e)}"
         )
     finally:
         # Clean up temporary file
