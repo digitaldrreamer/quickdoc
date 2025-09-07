@@ -34,3 +34,5 @@ transformers==4.41.1
 accelerate==0.30.1
 google-cloud-aiplatform[tokenization]==1.57.0
 pydantic-settings==2.2.1
+ebooklib==0.18
+beautifulsoup4==4.12.2
