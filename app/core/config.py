@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     ENABLE_DOCX_PROCESSING: bool = True
     ENABLE_IMAGE_OCR: bool = True
     ENABLE_MARKDOWN_PROCESSING: bool = True
+    ENABLE_EPUB_PROCESSING: bool = True
     
     # * AI Model Configuration
     SUMMARIZATION_MODEL: str = "google/flan-t5-small"

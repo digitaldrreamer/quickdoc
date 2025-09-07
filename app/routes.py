@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 import json
 import time
 
-from .processor import extract_text_from_doc, extract_text_by_pages_from_pdf
+from .processor import extract_text_from_doc, extract_text_by_pages_from_pdf, extract_text_by_chapters_from_epub
 from .utils import get_file_type, is_supported_file_type
 from .metrics import ResourceTracker
 from .pdf_converter import PDFConverter, Priority, ContentType
@@ -19,7 +19,7 @@ router = APIRouter()
 # Supported file types
 SUPPORTED_EXTENSIONS = {
     '.pdf', '.docx', '.odt', '.rtf', '.md', '.markdown',
-    '.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'
+    '.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.epub'
 }
 
 # Pydantic models for PDF conversion request
@@ -74,6 +74,14 @@ class PDFPagesResponse(BaseModel):
     """Response model for page-by-page PDF text extraction"""
     pages: List[str] = Field(..., description="List of text content for each page")
     page_count: int = Field(..., description="Total number of pages")
+    filename: str = Field(..., description="Original filename")
+    file_type: str = Field(..., description="File extension")
+    metrics: Dict[str, Any] = Field(..., description="Processing metrics")
+
+class EPUBChaptersResponse(BaseModel):
+    """Response model for chapter-by-chapter EPUB text extraction"""
+    chapters: List[str] = Field(..., description="List of text content for each chapter")
+    chapter_count: int = Field(..., description="Total number of chapters")
     filename: str = Field(..., description="Original filename")
     file_type: str = Field(..., description="File extension")
     metrics: Dict[str, Any] = Field(..., description="Processing metrics")
@@ -261,12 +269,115 @@ async def extract_text_by_pages_endpoint(file: UploadFile = File(...)) -> PDFPag
             except Exception as e:
                 logger.warning(f"Could not delete temporary file {temp_file_path}: {e}")
 
+@router.post("/extract-chapters", response_model=EPUBChaptersResponse)
+async def extract_text_by_chapters_endpoint(file: UploadFile = File(...)) -> EPUBChaptersResponse:
+    """
+    Extract text from uploaded EPUB file chapter by chapter.
+    
+    Accepts: EPUB files only
+    Returns: JSON with array of chapter texts and processing metrics
+    
+    Processing Limits:
+    - File size: Maximum 50MB
+    - Processing timeout: 60 seconds
+    
+    Response Format:
+    {
+        "chapters": ["chapter 1 text", "chapter 2 text", ...],
+        "chapter_count": 2,
+        "filename": "book.epub",
+        "file_type": ".epub",
+        "metrics": {
+            "processing_time_seconds": 1.23,
+            "method_used": "epub_chapter_extraction",
+            "memory_usage_mb": 45.6
+        }
+    }
+    """
+    
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
+    # Check if file is EPUB
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext != '.epub':
+        raise HTTPException(
+            status_code=400, 
+            detail="Only EPUB files are supported for chapter-by-chapter extraction"
+        )
+    
+    # Check file size limit
+    content = await file.read()
+    if len(content) > 50 * 1024 * 1024:  # 50MB limit
+        raise HTTPException(
+            status_code=413,
+            detail="File too large. Maximum size for chapter extraction is 50MB."
+        )
+    
+    # Create temporary file
+    temp_file_path = ""
+    try:
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
+        file_size = os.path.getsize(temp_file_path)
+        logger.info(f"Processing EPUB for chapter-by-chapter extraction: {file.filename} (size: {file_size} bytes)")
+        
+        # Track metrics during text extraction
+        with ResourceTracker() as tracker:
+            chapters_text = await extract_text_by_chapters_from_epub(temp_file_path, tracker)
+        
+        metrics = tracker.get_metrics(file_size_bytes=file_size)
+        logger.info(f"Chapter-by-chapter extraction metrics for {file.filename}: {metrics}")
+
+        if not chapters_text or not any(chapter.strip() for chapter in chapters_text):
+            logger.warning(f"No text extracted from any chapter of file: {file.filename}")
+            return EPUBChaptersResponse(
+                chapters=[""],
+                chapter_count=1,
+                filename=file.filename,
+                file_type=file_ext,
+                metrics=metrics
+            )
+        
+        logger.info(f"Successfully extracted text from {len(chapters_text)} chapters of {file.filename}")
+        
+        return EPUBChaptersResponse(
+            chapters=chapters_text,
+            chapter_count=len(chapters_text),
+            filename=file.filename,
+            file_type=file_ext,
+            metrics=metrics
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing EPUB file {file.filename}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error processing EPUB file: {str(e)}"
+        )
+    finally:
+        # Clean up temporary file
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except Exception as e:
+                logger.warning(f"Could not delete temporary file {temp_file_path}: {e}")
+
 @router.get("/supported-formats")
 async def get_supported_formats():
     """Get list of supported file formats"""
     return {
         "supported_extensions": sorted(list(SUPPORTED_EXTENSIONS)),
-        "description": "Upload documents in any of these formats for text extraction"
+        "description": "Upload documents in any of these formats for text extraction",
+        "special_endpoints": {
+            "extract-pages": "PDF files only - returns page-by-page text",
+            "extract-chapters": "EPUB files only - returns chapter-by-chapter text"
+        }
     }
 
 @router.post("/convert-to-pdf")
