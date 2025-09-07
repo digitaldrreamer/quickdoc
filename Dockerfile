@@ -25,6 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
     libgomp1 \
+    # EPUB processing dependencies
+    libxml2-dev \
+    libxslt1-dev \
+    zlib1g-dev \
     # Utilities
     curl \
     && apt-get clean \
@@ -57,6 +61,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
     libgomp1 \
+    # EPUB processing runtime dependencies
+    libxml2 \
+    libxslt1.1 \
+    zlib1g \
     curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -67,6 +75,12 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
 COPY ./app ./app
+
+# Note: This application now supports:
+# - PDF text extraction (page-by-page and full text)
+# - EPUB text extraction (chapter-by-chapter and full text)
+# - DOCX, ODT, RTF, Markdown, and image processing
+# - AI-powered summarization and embedding services
 
 # Create a non-root user and give it ownership of the app directory.
 # This is a critical security best practice.

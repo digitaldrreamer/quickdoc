@@ -7,6 +7,9 @@ services:
       - "8002:8002"
     env_file:
       - .env
+    environment:
+      # Enable EPUB processing by default
+      - ENABLE_EPUB_PROCESSING=true
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
