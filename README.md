@@ -12,7 +12,9 @@ An intelligent, configurable microservice for document text extraction, AI-power
 ## Features
 
 ### Document Processing
-- **Multi-format Support**: PDF, DOCX, ODT, RTF, Markdown, and images (JPG, PNG, BMP, TIFF)
+- **Multi-format Support**: PDF, DOCX, ODT, RTF, Markdown, EPUB, and images (JPG, PNG, BMP, TIFF)
+- **Page-by-Page Extraction**: Extract text from PDFs page by page or as complete document
+- **Chapter-by-Chapter Extraction**: Extract text from EPUBs chapter by chapter or as complete book
 - **Intelligent OCR**: Automatic text extraction from scanned PDFs and images using PaddleOCR
 - **Configurable Processing**: Enable/disable specific document types to save resources
 

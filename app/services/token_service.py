@@ -22,8 +22,7 @@ class TokenCounter:
             token = settings.HUGGING_FACE_HUB_TOKEN or os.environ.get("HUGGING_FACE_HUB_TOKEN")
             self.tokenizers["mistral"] = AutoTokenizer.from_pretrained(
                 "mistralai/Mistral-7B-v0.1", 
-                token=token,
-                use_auth_token=token if token else None
+                token=token
             )
             
             # * Gemini Tokenizer (requires Google Cloud setup)
