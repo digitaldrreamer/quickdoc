@@ -91,8 +91,8 @@ USER appuser
 
 # Add a HEALTHCHECK to let Docker know if the app is running correctly
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8002/health || exit 1
+  CMD curl -f http://localhost:8005/health || exit 1
 
 # Expose port and define the command to run the application
-EXPOSE 8002
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002"]
+EXPOSE 8005
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005"]

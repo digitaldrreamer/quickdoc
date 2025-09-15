@@ -82,7 +82,7 @@ def test_epub_extraction_endpoint():
     print("1. Place an EPUB file in this directory")
     print("2. Run: python test_epub_extraction.py <epub_filename>")
     print("3. Or use curl:")
-    print("   curl -X POST -F 'file=@your_file.epub' http://localhost:8002/extract-chapters")
+    print("   curl -X POST -F 'file=@your_file.epub' http://localhost:8005/extract-chapters")
     
     return True
 

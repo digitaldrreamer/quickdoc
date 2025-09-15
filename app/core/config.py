@@ -4,7 +4,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # Basic server configuration
-    PORT: int = 8002
+    PORT: int = 8005
     MAX_FILE_SIZE_MB: int = 15
     LOG_LEVEL: str = "INFO"
 

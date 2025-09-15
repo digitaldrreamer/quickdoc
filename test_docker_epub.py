@@ -8,7 +8,7 @@ import json
 import time
 
 # Test configuration
-BASE_URL = "http://localhost:8002"
+BASE_URL = "http://localhost:8005"
 
 def test_docker_epub_functionality():
     """Test EPUB functionality in Docker container"""

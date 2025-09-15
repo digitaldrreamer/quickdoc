@@ -9,7 +9,7 @@ import os
 from typing import Dict, Any
 
 # Test configuration
-BASE_URL = "http://localhost:8002"
+BASE_URL = "http://localhost:8005"
 TEST_MARKDOWN = """
 # Test Document
 

@@ -5,4 +5,4 @@ services:
     volumes:
       - ./app:/app/app
       - ./cli.py:/app/cli.py
-    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload 
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8005 --reload 

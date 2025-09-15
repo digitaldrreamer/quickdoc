@@ -57,13 +57,13 @@ An intelligent, configurable microservice for document text extraction, AI-power
    ```bash
    # Test document extraction
    echo "Hello, QuickDoc!" > test.md
-   curl -F "file=@test.md" http://localhost:8002/extract
+   curl -F "file=@test.md" http://localhost:8005/extract
    
    # Check service status
-   curl http://localhost:8002/health
+   curl http://localhost:8005/health
    ```
 
-The service will be available at `http://localhost:8002` with interactive documentation at `http://localhost:8002/docs`. You can set the port in `.env`
+The service will be available at `http://localhost:8005` with interactive documentation at `http://localhost:8005/docs`. You can set the port in `.env`
 
 ### Option 2: Manual Installation
 
@@ -106,10 +106,10 @@ cp env.example .env
 
 ```bash
 # Development
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8005 --reload
 
 # Production
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8002
+gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8005
 ```
 
 ---
@@ -175,7 +175,7 @@ ENABLE_DOCUMENT_PROCESSING=false
 Extract text from documents.
 
 ```bash
-curl -X POST -F "file=@document.pdf" http://localhost:8002/extract
+curl -X POST -F "file=@document.pdf" http://localhost:8005/extract
 ```
 
 **Response:**
@@ -204,14 +204,14 @@ Generate embeddings for text.
 ```bash
 curl -X POST -H "Content-Type: application/json" \
   -d '{"text": "Hello world", "normalize": true}' \
-  http://localhost:8002/ai/embed/text
+  http://localhost:8005/ai/embed/text
 ```
 
 #### `POST /ai/embed/document`
 Extract text from document and generate embeddings.
 
 ```bash
-curl -X POST -F "file=@document.pdf" http://localhost:8002/ai/embed/document
+curl -X POST -F "file=@document.pdf" http://localhost:8005/ai/embed/document
 ```
 
 #### `POST /ai/summarize`
@@ -220,7 +220,7 @@ Summarize text with configurable quality.
 ```bash
 curl -X POST -H "Content-Type: application/json" \
   -d '{"text": "Long text to summarize...", "max_length": 150, "quality": "high"}' \
-  http://localhost:8002/ai/summarize
+  http://localhost:8005/ai/summarize
 ```
 
 #### `POST /ai/tokens/count/{model}`
@@ -229,7 +229,7 @@ Count tokens for specific models (llama3, mistral, gemini).
 ```bash
 curl -X POST -H "Content-Type: application/json" \
   -d '{"text": "Text to count tokens for"}' \
-  http://localhost:8002/ai/tokens/count/llama3
+  http://localhost:8005/ai/tokens/count/llama3
 ```
 
 ### Utility Endpoints
@@ -266,7 +266,7 @@ services:
   quickdoc:
     image: quickdoc:latest
     ports:
-      - "8002:8002"
+      - "8005:8005"
     env_file: .env
     deploy:
       resources:
@@ -275,7 +275,7 @@ services:
           cpus: '1.0'
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -314,7 +314,7 @@ spec:
       - name: quickdoc
         image: quickdoc:latest
         ports:
-        - containerPort: 8002
+        - containerPort: 8005
         env:
         - name: ENABLE_SUMMARIZATION
           value: "true"
@@ -330,7 +330,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 8002
+            port: 8005
           initialDelaySeconds: 30
           periodSeconds: 10
 ---
@@ -343,7 +343,7 @@ spec:
     app: quickdoc
   ports:
   - port: 80
-    targetPort: 8002
+    targetPort: 8005
   type: LoadBalancer
 ```
 
@@ -366,7 +366,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Run in development mode
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8002
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8005
 ```
 
 ### Running Tests

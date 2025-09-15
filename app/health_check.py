@@ -12,7 +12,7 @@ def check_health(max_retries=3, delay=1):
     """Check if the service is healthy."""
     for attempt in range(max_retries):
         try:
-            response = requests.get("http://localhost:8002/health", timeout=5)
+            response = requests.get("http://localhost:8005/health", timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 if data.get("status") == "healthy":

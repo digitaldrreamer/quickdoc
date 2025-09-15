@@ -9,7 +9,7 @@ import os
 from typing import Dict, Any
 
 # Test configuration
-BASE_URL = "http://localhost:8002"
+BASE_URL = "http://localhost:8005"
 
 def test_page_extraction_endpoint():
     """Test the /extract-pages endpoint"""
@@ -82,7 +82,7 @@ def test_page_extraction_endpoint():
     print("1. Place a PDF file in this directory")
     print("2. Run: python test_page_extraction.py <pdf_filename>")
     print("3. Or use curl:")
-    print("   curl -X POST -F 'file=@your_file.pdf' http://localhost:8002/extract-pages")
+    print("   curl -X POST -F 'file=@your_file.pdf' http://localhost:8005/extract-pages")
     
     return True
 
