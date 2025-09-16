@@ -20,6 +20,7 @@ An intelligent, configurable microservice for document text extraction, AI-power
 
 ### AI Util Services
 - **Text Summarization**: Advanced summarization with configurable quality levels using transformer models
+- **Document Embeddings**: Convert PDFs/EPUBs to page-by-page embeddings with intelligent chunking
 - **Text Embeddings**: Generate semantic embeddings for texts and documents
 - **Token Counting**: Accurate token counting for Llama 3, Mistral, and Gemini models
 - **Async Processing**: Non-blocking AI operations with queue management
@@ -212,6 +213,43 @@ Extract text from document and generate embeddings.
 
 ```bash
 curl -X POST -F "file=@document.pdf" http://localhost:8005/ai/embed/document
+```
+
+#### `POST /embed/document`
+Convert PDF/EPUB to page-by-page embeddings with intelligent chunking.
+
+```bash
+curl -X POST -F "file=@document.pdf" -F "chunking_strategy=semantic" http://localhost:8005/embed/document
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "filename": "document.pdf",
+  "file_type": ".pdf",
+  "chunks": [
+    {
+      "chunk_id": "document.pdf_page_1_chunk_0",
+      "text": "Chapter 1: Introduction...",
+      "embedding": [0.123, -0.456, 0.789, ...],
+      "metadata": {
+        "page_number": 1,
+        "chunk_index": 0,
+        "char_count": 1250,
+        "word_count": 200,
+        "contains_headers": true,
+        "semantic_boundary": "paragraph"
+      }
+    }
+  ],
+  "stats": {
+    "total_chunks": 45,
+    "total_pages": 20,
+    "embedding_dimensions": 384,
+    "processing_time_ms": 2340.5
+  }
+}
 ```
 
 #### `POST /ai/summarize`

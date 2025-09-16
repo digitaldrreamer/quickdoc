@@ -9,6 +9,7 @@ from typing import Optional
 
 from .routes import router as doc_conversion_router
 from .api.ai_routes import router as ai_router
+from .api.embedding_routes import router as embedding_router
 from .core.config import settings
 
 # * Conditional imports based on configuration
@@ -157,6 +158,13 @@ else:
 # * Always include AI routes, but they'll check for service availability internally
 app.include_router(ai_router, prefix="/ai", tags=["AI Services"])
 
+# * Include embedding routes if embedding model is enabled
+if settings.ENABLE_EMBEDDING_MODEL:
+    app.include_router(embedding_router, tags=["Document Embeddings"])
+    logger.info("Document embedding routes enabled")
+else:
+    logger.info("Embedding model disabled - skipping embedding routes")
+
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -207,6 +215,12 @@ async def root():
             "embed_text": "POST /ai/embed/text",
             "embed_document": "POST /ai/embed/document",
         })
+        endpoints["document_embedding_endpoints"] = {
+            "embed_document": "POST /embed/document",
+            "embed_text_chunks": "POST /embed/text",
+            "get_strategies": "GET /embed/strategies",
+            "health_check": "GET /embed/health",
+        }
     if settings.ENABLE_SUMMARIZATION:
         ai_endpoints["summarize"] = "POST /ai/summarize"
     if settings.ENABLE_TOKEN_COUNTING:
